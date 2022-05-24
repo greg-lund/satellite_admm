@@ -118,7 +118,7 @@ def plot_state_traj(t,x,mu,cov,filename=None):
 
 np.random.seed(1)
 dt = 1e-1
-tmax = 1
+tmax = 10
 t = np.arange(0,tmax,dt)
 n = 4
 m = 2
@@ -162,10 +162,12 @@ neighbors = [[1],[0]]
 
 
 admm_est = ADMM_Estimator(gs,fCs,f_d,fA,neighbors,mu0,cov0,meas,Q,R_ind)
-admm_est.step()
-print(admm_est.x[1,:,:])
+admm_est.run()
+mu_admm = admm_est.x[:,0,:]
+cov_admm = admm_est.cov[:,0,:,:]
 
-#mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
-#plot_state_traj(t,x,mu,cov,"../figures/ekf.png")
-#mu_admm,cov_admm = admm(mu0,cov0,y,A,gs,fCs,Q,R_ind,rho=1,tol=1e-3)
-#plot_state_traj(t,x,mu_admm,cov_admm,"../figures/admm.png")
+print("Running EKF")
+mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
+
+plot_state_traj(t,x,mu,cov,"../figures/ekf.png")
+plot_state_traj(t,x,mu_admm,cov_admm,"../figures/admm.png")

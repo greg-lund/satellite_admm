@@ -46,12 +46,17 @@ class ADMM_Estimator:
         self.x = np.zeros((self.T,self.N,self.n))
         self.cov = np.zeros((self.T,self.N,self.n,self.n))
 
+        for i in range(self.N):
+            self.x[0,i,:] = mu0.flatten()
+            self.cov[0,i,:,:] = cov0
+
         self.t = 0
 
     def step(self,tol=1e-3):
         """
             Runs a single round of ADMM iterations to convergence.
         """
+        print("Running ADMM at t =",self.t)
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
@@ -89,3 +94,10 @@ class ADMM_Estimator:
             self.cov[self.t+1,i,:,:] = np.linalg.inv(np.sum([Cs[j].T@self.Ri@Cs[j] + cov_invs[j] for j in self.neighbors[i]],axis=0))
 
         self.t += 1
+
+    def run(self):
+        """
+            Runs ADMM over all measurements
+        """
+        while self.t < self.T-1:
+            self.step()
