@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.linalg
+from tqdm import tqdm 
 
 import sys
 sys.path.insert(0,"..")
@@ -23,7 +24,7 @@ def ekf(mu0,cov0,y,A,g,fC,Q,R):
     mu[0,:] = mu0.T
     cov[0,:,:] = cov0
 
-    for t in range(T-1):
+    for t in tqdm(range(T-1)):
         # Predict
         mu[t+1,:] = A @ mu[t,:]
         cov[t+1,:,:] = A @ cov[t,:,:] @ A.T + Q
@@ -98,6 +99,7 @@ fA = lambda x,t: A
 neighbors = [[1],[0]]
 
 
+print("Running ADMM")
 admm_est = ADMM_Estimator(gs,fCs,f_d,fA,neighbors,mu0,cov0,meas,Q,R_ind)
 admm_est.run()
 mu_admm = admm_est.x[:,0,:]
@@ -106,5 +108,6 @@ cov_admm = admm_est.cov[:,0,:,:]
 print("Running EKF")
 mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
 
+print("Saving plots")
 plot_state_traj(t,x,mu,cov,"../figures/ekf.png")
 plot_state_traj(t,x,mu_admm,cov_admm,"../figures/admm.png")

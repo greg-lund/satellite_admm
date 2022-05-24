@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+from tqdm import tqdm
 
 class ADMM_Estimator:
     def __init__(self,meas_funcs,meas_jacs,f_d,fA,neighbors,mu0,cov0,meas,Q,R,penalty=20.0,max_iter=1000):
@@ -56,7 +57,6 @@ class ADMM_Estimator:
         """
             Runs a single round of ADMM iterations to convergence.
         """
-        print("Running ADMM at t =",self.t)
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
@@ -85,7 +85,7 @@ class ADMM_Estimator:
             diff_xs = sum([np.linalg.norm(xs[i]-xs_prev[i]) for i in range(self.N)])
             diff_ps = sum([np.linalg.norm(ps[i]-ps_prev[i]) for i in range(self.N)])
             if diff_xs < tol and diff_ps < tol:
-                print("ADMM step met stopping criteria in %d steps"%(k+1))
+                #print("ADMM step met stopping criteria in %d steps"%(k+1))
                 break
 
         # Update means and covariances
@@ -99,5 +99,5 @@ class ADMM_Estimator:
         """
             Runs ADMM over all measurements
         """
-        while self.t < self.T-1:
+        for _ in tqdm(range(self.T-1)):
             self.step()
