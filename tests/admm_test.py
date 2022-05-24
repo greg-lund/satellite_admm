@@ -1,73 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.linalg
+
 import sys
 sys.path.insert(0,"..")
 from admm.admm import ADMM_Estimator
-from tqdm import tqdm
-
-def admm_step(mu0,cov0,y1,y2,A,C1,C2,Q,R,rho=10,tol=1e-3):
-    n = len(mu0)
-    m = len(y)
-    p1 = np.zeros((n,1))
-    p2 = np.zeros((n,1))
-    z = np.linalg.inv(A@cov0@A.T + Q)
-    Ri = np.linalg.inv(R)
-    v1 = np.linalg.inv(C1.T@Ri@C1 + 0.5 * z + rho * np.eye(n))
-    v2 = np.linalg.inv(C2.T@Ri@C2 + 0.5 * z + rho * np.eye(n))
-
-    x1 = np.linalg.inv(C1.T@Ri@C1 + 0.5 * z) @ (C1.T@Ri@y1 + 0.5 * z@A@mu0)
-    x2 = np.linalg.inv(C2.T@Ri@C2 + 0.5 * z) @ (C2.T@Ri@y1 + 0.5 * z@A@mu0)
-
-    prev_p1 = np.ones((n,1))
-    prev_p2 = np.ones((n,1))
-    i = 1
-    while True:
-        p1 += rho * (x1-x2)
-        p2 += rho * (x2-x1)
-
-        x1_prev = x1.copy()
-        x2_prev = x2.copy()
-
-        x1 = v1 @ (C1.T@Ri@y1 + 0.5 * z@A@mu0 - 0.5 * p1 + 0.5 * rho * (x1_prev+x2_prev))
-        x2 = v2 @ (C2.T@Ri@y2 + 0.5 * z@A@mu0 - 0.5 * p2 + 0.5 * rho * (x1_prev+x2_prev))
-
-        d = np.linalg.norm(x1-x2)
-        i += 1
-
-        if d < tol:
-            break
-
-    cov1 = C1.T@Ri@C1 + z
-    cov2 = C2.T@Ri@C2 + z
-    return x1,x2,cov1,cov2
-
-def admm(mu0,cov0,y,A,gs,fCs,Q,R,rho=10,tol=1e-3):
-
-    n = len(mu0)
-    T = y.shape[0]
-
-    num_agents = len(gs)
-    m = int(y.shape[1]/num_agents)
-
-    mu = np.zeros((T,n))
-    cov = np.zeros((T,n,n))
-    mu[0,:] = mu0.T
-    cov[0,:,:] = cov0
-
-    for t in range(T-1):
-        g1 = gs[0]
-        C1 = fCs[0](A@mu[t,:].reshape(-1,1))
-        g2 = gs[1]
-        C2 = fCs[1](A@mu[t,:].reshape(-1,1))
-        
-        y1 = y[t+1,:m].reshape(-1,1) - g1(A@mu[t,:].reshape(-1,1)) + C1@A@mu[t,:].reshape(-1,1)
-        y2 = y[t+1,m:].reshape(-1,1) - g2(A@mu[t,:].reshape(-1,1)) + C2@A@mu[t,:].reshape(-1,1)
-
-        x1,x2,cov1,cov2 = admm_step(mu[t,:].reshape(-1,1),cov[t,:,:],y1,y2,A,C1,C2,Q,R,rho,tol)
-        mu[t+1,:] = x1.T
-        cov[t+1,:,:] = 0.5 * np.linalg.inv(cov1+cov2)
-    return mu,cov
 
 def rng_meas(s,x):
     return np.linalg.norm(s.flatten()-x[:2].flatten())
