@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.linalg
+import sys
+sys.path.insert(0,"..")
+from admm.admm import ADMM_Estimator
+from tqdm import tqdm
 
 def admm_step(mu0,cov0,y1,y2,A,C1,C2,Q,R,rho=10,tol=1e-3):
     n = len(mu0)
@@ -9,11 +13,11 @@ def admm_step(mu0,cov0,y1,y2,A,C1,C2,Q,R,rho=10,tol=1e-3):
     p2 = np.zeros((n,1))
     z = np.linalg.inv(A@cov0@A.T + Q)
     Ri = np.linalg.inv(R)
-    v1 = np.linalg.inv(C1.T@Ri@C1 + z + 2 * rho * np.eye(n))
-    v2 = np.linalg.inv(C2.T@Ri@C2 + z + 2 * rho * np.eye(n))
+    v1 = np.linalg.inv(C1.T@Ri@C1 + 0.5 * z + rho * np.eye(n))
+    v2 = np.linalg.inv(C2.T@Ri@C2 + 0.5 * z + rho * np.eye(n))
 
-    x1 = np.linalg.inv(C1.T@Ri@C1 + z) @ (C1.T@Ri@y1 + z@A@mu0)
-    x2 = np.linalg.inv(C2.T@Ri@C2 + z) @ (C2.T@Ri@y1 + z@A@mu0)
+    x1 = np.linalg.inv(C1.T@Ri@C1 + 0.5 * z) @ (C1.T@Ri@y1 + 0.5 * z@A@mu0)
+    x2 = np.linalg.inv(C2.T@Ri@C2 + 0.5 * z) @ (C2.T@Ri@y1 + 0.5 * z@A@mu0)
 
     prev_p1 = np.ones((n,1))
     prev_p2 = np.ones((n,1))
@@ -25,8 +29,8 @@ def admm_step(mu0,cov0,y1,y2,A,C1,C2,Q,R,rho=10,tol=1e-3):
         x1_prev = x1.copy()
         x2_prev = x2.copy()
 
-        x1 = v1 @ (C1.T@Ri@y1 + z@A@mu0 - p1 + rho * (x1_prev+x2_prev))
-        x2 = v2 @ (C2.T@Ri@y2 + z@A@mu0 - p2 + rho * (x1_prev+x2_prev))
+        x1 = v1 @ (C1.T@Ri@y1 + 0.5 * z@A@mu0 - 0.5 * p1 + 0.5 * rho * (x1_prev+x2_prev))
+        x2 = v2 @ (C2.T@Ri@y2 + 0.5 * z@A@mu0 - 0.5 * p2 + 0.5 * rho * (x1_prev+x2_prev))
 
         d = np.linalg.norm(x1-x2)
         i += 1
@@ -62,7 +66,7 @@ def admm(mu0,cov0,y,A,gs,fCs,Q,R,rho=10,tol=1e-3):
 
         x1,x2,cov1,cov2 = admm_step(mu[t,:].reshape(-1,1),cov[t,:,:],y1,y2,A,C1,C2,Q,R,rho,tol)
         mu[t+1,:] = x1.T
-        cov[t+1,:,:] = 0.5 * np.linalg.inv(np.linalg.inv(cov1)+np.linalg.inv(cov2))
+        cov[t+1,:,:] = 0.5 * np.linalg.inv(cov1+cov2)
     return mu,cov
 
 def rng_meas(s,x):
@@ -95,7 +99,7 @@ def ekf(mu0,cov0,y,A,g,fC,Q,R):
 
     return mu,cov
 
-def plot_state_traj(t,x,mu,cov):
+def plot_state_traj(t,x,mu,cov,filename=None):
     fig,axs = plt.subplots(4)
     cmap = plt.get_cmap("tab10")
     xlbl = ["x","y","vx","vy"]
@@ -107,10 +111,14 @@ def plot_state_traj(t,x,mu,cov):
         axs[i].legend()
         axs[i].set_xlabel("Time [s]")
 
-    plt.show()
+    if filename:
+        plt.savefig(filename,dpi=300)
+    else:
+        plt.show()
 
+np.random.seed(1)
 dt = 1e-1
-tmax = 10
+tmax = 1
 t = np.arange(0,tmax,dt)
 n = 4
 m = 2
@@ -130,12 +138,15 @@ s2 = np.array([10,0]).reshape(-1,1)
 
 x = np.zeros((len(t),n))
 y = np.zeros((len(t),m))
+meas = np.zeros((len(t),2,1))
 x[0,:] = x0.T
 for i in range(len(t)-1):
     w = np.random.randn(n)
     xn = A @ x[i,:] + scipy.linalg.sqrtm(Q) @ w
     x[i+1,:] = xn.reshape(n,)
     y[i+1,:] = np.array([rng_meas(s1,x[i+1,:]),rng_meas(s2,x[i+1,:])]) + scipy.linalg.sqrtm(R) @ np.random.randn(m)
+    meas[i,0,:] = y[i+1,0]
+    meas[i,1,:] = y[i+1,1]
 
 mu0 = np.array([0,0,0,0]).reshape(-1,1)
 cov0 = np.eye(4)
@@ -145,15 +156,16 @@ fC = lambda x: np.vstack([rng_jac(s1,x),rng_jac(s2,x)])
 
 gs = [lambda x: rng_meas(s1,x),lambda x: rng_meas(s2,x)]
 fCs = [lambda x: rng_jac(s1,x),lambda x: rng_jac(s2,x)]
+f_d = lambda x,t: A@x
+fA = lambda x,t: A
+neighbors = [[1],[0]]
 
-mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
-plot_state_traj(t,x,mu,cov)
-mu_admm,cov_admm = admm(mu0,cov0,y,A,gs,fCs,Q,R_ind,rho=1,tol=1e-3)
-plot_state_traj(t,x,mu_admm,cov_admm)
 
-#plt.plot(x[:,0],x[:,1],label="x")
-#plt.plot(mu[:,0],mu[:,1],label="mu_ekf")
-#plt.plot(mu_admm[:,0],mu_admm[:,1],label="mu_admm")
-#plt.legend()
-#plt.gca().set_aspect("equal")
-#plt.show()
+admm_est = ADMM_Estimator(gs,fCs,f_d,fA,neighbors,mu0,cov0,meas,Q,R_ind)
+admm_est.step()
+print(admm_est.x[1,:,:])
+
+#mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
+#plot_state_traj(t,x,mu,cov,"../figures/ekf.png")
+#mu_admm,cov_admm = admm(mu0,cov0,y,A,gs,fCs,Q,R_ind,rho=1,tol=1e-3)
+#plot_state_traj(t,x,mu_admm,cov_admm,"../figures/admm.png")
