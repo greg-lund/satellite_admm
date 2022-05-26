@@ -3,7 +3,7 @@ import copy
 from tqdm import tqdm
 
 class ADMM_Estimator:
-    def __init__(self,meas_funcs,meas_jacs,f_d,fA,neighbors,mu0,cov0,meas,Q,R,penalty=20.0,max_iter=100):
+    def __init__(self,meas_funcs,meas_jacs,f_d,fA,neighbors,mu0,cov0,meas,Q,R,mu=.5,max_iter=100):
         """
             Constructor for the ADMM_Estimator class
 
@@ -23,7 +23,6 @@ class ADMM_Estimator:
             R: measurement noise covariance
 
             ==== Optional Arguments ====
-            penalty: ADMM penalty term (rho). Default = 1.0
             max_iter: Maximum Iterations for ADMM solves. Default = 100
         """
         self.meas_funcs = meas_funcs
@@ -38,7 +37,7 @@ class ADMM_Estimator:
         self.R = R
         self.Ri = np.linalg.inv(R)
 
-        self.penalty = penalty
+        self.mu = mu
         self.max_iter = max_iter
 
         (self.T,self.N,self.m) = meas.shape
@@ -57,41 +56,49 @@ class ADMM_Estimator:
         """
             Runs a single round of ADMM iterations to convergence.
         """
+        lam = np.zeros((self.N,self.N,self.n))
+        zs = np.zeros((self.N,self.n))
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
+        for i in range(self.N):
+            zs[i,:] = x_props[i]
+
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
-        ys = [self.meas[self.t+1,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
+        ys = [self.meas[self.t,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
         cov_invs = [np.linalg.inv(As[i]@self.cov[self.t,i,:,:]@As[i].T + self.Q) for i in range(self.N)]
 
-        invs = [np.linalg.inv(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i] + self.penalty * len(self.neighbors[i])*np.eye(self.n)) for i in range(self.N)]
-        ps = np.zeros((self.N,self.n))
+        invs = [np.linalg.inv(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i] + 1 / self.mu * (len(self.neighbors[i])+1)*np.eye(self.n)) for i in range(self.N)]
         xs = [np.linalg.solve(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i],(Cs[i].T@self.Ri@ys[i] + 1/self.N * cov_invs[i]@x_props[i]).reshape(-1,1)) for i in range(self.N)]
 
         # Do ADMM iterations
         for k in range(self.max_iter):
 
-            ps_prev = copy.deepcopy(ps)
-            xs_prev = copy.deepcopy(xs)
+            prev_xs = copy.deepcopy(xs)
+            prev_zs = copy.deepcopy(zs)
+            prev_lam = copy.deepcopy(lam)
 
-            # Dual Ascent
+            # Primal solve
             for i in range(self.N):
-                ps[i,:] = ps[i,:] + self.penalty * np.sum([xs[i] - xs[j] for j in self.neighbors[i]],axis=0).flatten()
+                xs[i] = invs[i]@(Cs[i].T@self.Ri@ys[i] + 1/self.N * cov_invs[i]@x_props[i] + sum([zs[j]/self.mu+lam[i,j] for j in self.neighbors[i]+[i,]]))
 
-            # Primal Minimize
+            # Dual updates
             for i in range(self.N):
-                xs[i] = (invs[i] @ (Cs[i].T@self.Ri@ys[i] + 1/self.N * cov_invs[i]@x_props[i] - 0.5 * ps[i,:] + 0.5 * self.penalty * np.sum([xs_prev[i]+xs_prev[j] for j in self.neighbors[i]],axis=0).flatten())).reshape(-1,1)
+                zs[i,:] = self.mu / (len(self.neighbors[i])+1) * sum([1/self.mu * xs[j] - lam[j,i] for j in self.neighbors[i]+[i,]])
+
+            for i in range(self.N):
+                for j in self.neighbors[i]+[i,]:
+                    lam[i,j] = lam[i,j] - 1/self.mu * (xs[i]-zs[j])
 
             # Check stopping criteria
-            diff_xs = sum([np.linalg.norm(xs[i]-xs_prev[i]) for i in range(self.N)])
-            diff_ps = sum([np.linalg.norm(ps[i]-ps_prev[i]) for i in range(self.N)])
-            if diff_xs < tol and diff_ps < tol:
-                #print("ADMM step met stopping criteria in %d steps"%(k+1))
+            diff_xs = sum([np.linalg.norm(xs[i]-prev_xs[i]) for i in range(self.N)])
+            diff_zs = sum([np.linalg.norm(zs[i]-prev_zs[i]) for i in range(self.N)])
+            if diff_xs < tol and diff_zs < tol:
                 break
 
         # Update means and covariances
         for i in range(self.N):
             self.x[self.t+1,i,:] = xs[i].flatten()
-            self.cov[self.t+1,i,:,:] = np.linalg.inv(np.sum([Cs[j].T@self.Ri@Cs[j] + cov_invs[j] for j in self.neighbors[i]+[i,]],axis=0))
+            self.cov[self.t+1,i,:,:] = np.linalg.inv(sum([Cs[j].T@self.Ri@Cs[j] + cov_invs[j] for j in self.neighbors[i]+[i,]]))
 
         self.t += 1
 
