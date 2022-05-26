@@ -40,8 +40,8 @@ def ekf(mu0,cov0,y,A,g,fC,Q,R):
 def plot_state_traj(t,x,mu,cov,filename=None):
     fig,axs = plt.subplots(4)
     cmap = plt.get_cmap("tab10")
-    xlbl = ["x","y","vx","vy"]
-    mulbl = ["mu_x","mu_y","mu_vx","mu_vy"]
+    xlbl = [r"$x$",r"$y$",r"$v_x$",r"$v_y$"]
+    mulbl = [r"$\mu_x$",r"$\mu_y$",r"$\mu_{v_x}$",r"$\mu_{v_y}$"]
     for i in range(4):
         axs[i].plot(t,x[:,i],label=xlbl[i],color=cmap(0))
         axs[i].plot(t,mu[:,i],label=mulbl[i],color=cmap(1))
@@ -61,7 +61,7 @@ t = np.arange(0,tmax,dt)
 n = 4
 
 # Sensor locations
-s = [np.array([0,10]).reshape(-1,1),np.array([10,0]).reshape(-1,1)]
+s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([2,-2]).reshape(-1,1),np.array([5,6]).reshape(-1,1)]
 m = len(s)
 
 A = np.vstack([np.hstack([np.eye(2),dt*np.eye(2)]),np.hstack([np.zeros((2,2)),np.eye(2)])])

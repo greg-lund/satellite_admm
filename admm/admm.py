@@ -3,7 +3,7 @@ import copy
 from tqdm import tqdm
 
 class ADMM_Estimator:
-    def __init__(self,meas_funcs,meas_jacs,f_d,fA,neighbors,mu0,cov0,meas,Q,R,penalty=20.0,max_iter=1000):
+    def __init__(self,meas_funcs,meas_jacs,f_d,fA,neighbors,mu0,cov0,meas,Q,R,penalty=20.0,max_iter=100):
         """
             Constructor for the ADMM_Estimator class
 
@@ -15,7 +15,7 @@ class ADMM_Estimator:
             neighbors: A list of lists. Indexing in by an agent's index gives a list of its neighbor indices
             mu0: numpy array of initial state estimate. Shape should be (n,)
             cov0: initial state estimate covariance. Shape should be (n,n)
-            meas: numpy array of measurements. Shape should be TxNxm where: 
+            meas: numpy array of measurements. Shape should be TxNxm where:
                 T = number of timesteps
                 N = number of agents
                 m = measurement dimension
@@ -60,7 +60,7 @@ class ADMM_Estimator:
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
-        ys = [self.meas[self.t,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
+        ys = [self.meas[self.t+1,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
         cov_invs = [np.linalg.inv(As[i]@self.cov[self.t,i,:,:]@As[i].T + self.Q) for i in range(self.N)]
 
         invs = [np.linalg.inv(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i] + self.penalty * len(self.neighbors[i])*np.eye(self.n)) for i in range(self.N)]
