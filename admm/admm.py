@@ -68,7 +68,7 @@ class ADMM_Estimator:
         cov_inv = np.linalg.inv(cov_prop)
 
         C = np.vstack([self.meas_jacs[i](x_prop) for i in range(self.N)])
-        y = np.vstack([self.meas[self.t,i,:] for i in range(self.N)])
+        y = np.vstack([self.meas[self.t+1,i,:] for i in range(self.N)])
         y_exp = np.vstack([self.meas_funcs[i](x_prop) for i in range(self.N)])
         y_hat = (y - y_exp + C@x_prop.reshape(-1,1)).flatten()
 
@@ -85,7 +85,7 @@ class ADMM_Estimator:
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
-        ys = [self.meas[self.t,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
+        ys = [self.meas[self.t+1,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
         cov_invs = [np.linalg.inv(As[i]@self.cov[self.t,i,:,:]@As[i].T + self.Q) for i in range(self.N)]
 
         invs = [np.linalg.inv(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i] + self.penalty * len(self.neighbors[i])*np.eye(self.n)) for i in range(self.N)]

@@ -61,8 +61,8 @@ t = np.arange(0,tmax,dt)
 n = 4
 
 # Sensor locations
-s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([2,-2]).reshape(-1,1),np.array([5,6]).reshape(-1,1)]
-#s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([4,5]).reshape(-1,1)]
+#s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([2,-2]).reshape(-1,1),np.array([5,6]).reshape(-1,1)]
+s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([4,5]).reshape(-1,1)]
 m = len(s)
 
 A = np.vstack([np.hstack([np.eye(2),dt*np.eye(2)]),np.hstack([np.zeros((2,2)),np.eye(2)])])
@@ -82,7 +82,7 @@ for i in range(len(t)-1):
     x[i+1,:] = xn.reshape(n,)
     y[i+1,:] = np.array([rng_meas(s[j],x[i+1,:]) for j in range(m)]) + scipy.linalg.sqrtm(R) @ np.random.randn(m)
     for j in range(m):
-        meas[i,j,:] = y[i+1,j]
+        meas[i+1,j,:] = y[i+1,j]
 
 mu0 = np.array([0,0,0,0]).reshape(-1,1)
 cov0 = np.eye(4)
@@ -96,7 +96,10 @@ f_d = lambda x,t: A@x
 fA = lambda x,t: A
 
 # Just have fully connected ADMM
-neighbors = [[j for j in [x for x in range(m) if x != i]] for i in range(m)]
+if m == 3:
+    neighbors  = [[1],[0,2],[1]]
+else:
+    neighbors = [[j for j in [x for x in range(m) if x != i]] for i in range(m)]
 print("neighbors:",neighbors)
 
 print("Running ADMM")
