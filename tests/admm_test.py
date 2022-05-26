@@ -61,8 +61,8 @@ t = np.arange(0,tmax,dt)
 n = 4
 
 # Sensor locations
-#s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([2,-2]).reshape(-1,1),np.array([5,6]).reshape(-1,1)]
-s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([4,5]).reshape(-1,1)]
+s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([2,-2]).reshape(-1,1),np.array([5,6]).reshape(-1,1)]
+#s = [np.array([0,1]).reshape(-1,1),np.array([1,0]).reshape(-1,1),np.array([4,5]).reshape(-1,1)]
 m = len(s)
 
 A = np.vstack([np.hstack([np.eye(2),dt*np.eye(2)]),np.hstack([np.zeros((2,2)),np.eye(2)])])

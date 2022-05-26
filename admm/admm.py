@@ -53,14 +53,39 @@ class ADMM_Estimator:
 
         self.t = 0
 
-    def step(self,tol=1e-3):
+    def central_step(self):
+        """
+        Run a centralized MAP estimate step. For debugging purposes
+        Just sets the first index into self.x and self.cov
+        """
+        # Build correct size R matrix
+        R = np.kron(np.eye(self.N),self.R)
+        Ri = np.linalg.inv(R)
+
+        A = self.fA(self.x[self.t,0,:],self.t)
+        x_prop = self.f_d(self.x[self.t,0,:],self.t)
+        cov_prop = A@self.cov[self.t,0,:,:]@A.T + self.Q
+        cov_inv = np.linalg.inv(cov_prop)
+
+        C = np.vstack([self.meas_jacs[i](x_prop) for i in range(self.N)])
+        y = np.vstack([self.meas[self.t,i,:] for i in range(self.N)])
+        y_exp = np.vstack([self.meas_funcs[i](x_prop) for i in range(self.N)])
+        y_hat = (y - y_exp + C@x_prop.reshape(-1,1)).flatten()
+
+        self.x[self.t+1,0,:] = np.linalg.inv(cov_inv + C.T@Ri@C)@(cov_inv@x_prop + C.T@Ri@y_hat)
+        self.cov[self.t+1,0,:,:] = np.linalg.inv(C.T@Ri@C+cov_inv)
+
+        self.t += 1
+
+
+    def step(self,tol=1e-6):
         """
             Runs a single round of ADMM iterations to convergence.
         """
         x_props = [self.f_d(self.x[self.t,i,:],self.t) for i in range(self.N)]
         As = [self.fA(self.x[self.t,i,:],self.t) for i in range(self.N)]
         Cs = [self.meas_jacs[i](x_props[i]) for i in range(self.N)]
-        ys = [self.meas[self.t+1,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
+        ys = [self.meas[self.t,i,:] - self.meas_funcs[i](x_props[i]) + Cs[i]@x_props[i] for i in range(self.N)]
         cov_invs = [np.linalg.inv(As[i]@self.cov[self.t,i,:,:]@As[i].T + self.Q) for i in range(self.N)]
 
         invs = [np.linalg.inv(Cs[i].T@self.Ri@Cs[i] + 1/self.N * cov_invs[i] + self.penalty * len(self.neighbors[i])*np.eye(self.n)) for i in range(self.N)]
@@ -91,7 +116,7 @@ class ADMM_Estimator:
         # Update means and covariances
         for i in range(self.N):
             self.x[self.t+1,i,:] = xs[i].flatten()
-            self.cov[self.t+1,i,:,:] = np.linalg.inv(np.sum([Cs[j].T@self.Ri@Cs[j] + cov_invs[j] for j in self.neighbors[i]+[i,]],axis=0))
+            self.cov[self.t+1,i,:,:] = np.linalg.inv(np.sum([Cs[j].T@self.Ri@Cs[j] + 1/(len(self.neighbors[i])+1)*cov_invs[j] for j in self.neighbors[i]+[i,]],axis=0))
 
         self.t += 1
 
