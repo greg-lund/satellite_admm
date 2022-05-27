@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 import sys
 sys.path.insert(0,"..")
-from admm.admm import ADMM_Estimator
+from admm.inc_admm import IncADMM
 
 def rng_meas(s,x):
     return np.linalg.norm(s.flatten()-x[:2].flatten())
@@ -76,6 +76,7 @@ x = np.zeros((len(t),n))
 y = np.zeros((len(t),m))
 meas = np.zeros((len(t),m,1))
 x[0,:] = x0.T
+
 for i in range(len(t)-1):
     w = np.random.randn(n)
     xn = A @ x[i,:] + scipy.linalg.sqrtm(Q) @ w
@@ -84,16 +85,16 @@ for i in range(len(t)-1):
     for j in range(m):
         meas[i+1,j,:] = y[i+1,j]
 
-mu0 = np.array([0,0,0,0]).reshape(-1,1)
+mu0 = np.array([0,0,0,0])
 cov0 = np.eye(4)
 
-g = lambda x: np.vstack([rng_meas(s[i],x) for i in range(m)])
+g = lambda x: np.hstack([rng_meas(s[i],x) for i in range(m)])
 fC = lambda x: np.vstack([rng_jac(s[i],x) for i in range(m)])
 
 gs = [lambda x,i=i: rng_meas(s[i],x) for i in range(m)]
 fCs = [lambda x,i=i: rng_jac(s[i],x) for i in range(m)]
-f_d = lambda x,t: A@x
-fA = lambda x,t: A
+f_d = lambda x: A@x
+fA = lambda x: A
 
 # Just have fully connected ADMM
 if m == 3:
@@ -103,10 +104,18 @@ else:
 print("neighbors:",neighbors)
 
 print("Running ADMM")
-admm_est = ADMM_Estimator(gs,fCs,f_d,fA,neighbors,mu0,cov0,meas,Q,R_ind)
-admm_est.run()
-mu_admm = admm_est.x[:,0,:]
-cov_admm = admm_est.cov[:,0,:,:]
+admm = IncADMM(f_d,fA,Q,R_ind)
+mus = [mu0.copy() for _ in range(m)]
+covs = [cov0.copy() for _ in range(m)]
+mu_admm = np.zeros((len(y),4))
+cov_admm = np.zeros((len(y),4,4))
+mu_admm[0] = mu0.flatten()
+cov_admm[0] = cov0
+for i in range(len(t)-1):
+    ys = [meas[i+1,j,:] for j in range(m)]
+    mus,covs = admm.solve(ys,gs,fCs,mus,covs,neighbors)
+    mu_admm[i+1,:] = mus[0]
+    cov_admm[i+1,:] = covs[0]
 
 print("Running EKF")
 mu,cov = ekf(mu0,cov0,y,A,g,fC,Q,R)
