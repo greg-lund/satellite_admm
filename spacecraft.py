@@ -1,10 +1,12 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+from dynamics import *
 
 class Spacecraft:
 
-    def __init__(self, a, e, i, Om, w, M_start):
+    def __init__(self, a, e, i, Om, w, M_start, dt=50):
 
         self.a = a # Semimajor axis (km)
         self.e = e # Eccentricity
@@ -14,43 +16,16 @@ class Spacecraft:
         self.M_start = M_start # Starting mean anomaly (rad)
         self.M = M_start
 
-        self.T = 2*jnp.pi*jnp.sqrt(self.a**3/398600) # Orbital period (s)
-        self.n = 2*jnp.pi/self.T
+        self.T = 2*np.pi*np.sqrt(self.a**3/398600) # Orbital period (s)
+        self.n = 2*np.pi/self.T
 
-        self.Qr = jnp.eye(3) * 0.1
-        self.Qv = jnp.eye(3) * 0.005
+        self.Qr = np.eye(3) * 5
+        self.Qv = np.eye(3) * 0.5
 
-        self.Rr = jnp.eye(3) * 0.1
-        self.Rv = jnp.eye(3) * 0.1
-
-        self.r = jnp.zeros(3)
-        self.v = jnp.zeros(3)
+        self.r = np.zeros(3)
+        self.v = np.zeros(3)
         self.t = -1.
-
-
-
-    def get_true_anomaly(self, E):
-        # Find true anomaly from eccentric anomaly
-        nu = jnp.arctan2(jnp.sin(E)*jnp.sqrt(1 - self.e**2), jnp.cos(E) - self.e)
-        return nu
-
-
-
-    def get_E(self, M, e):
-
-        # Calculate the eccentric anomaly with the Newton-Rhapsod method
-        E_prev = jnp.pi # Intiialization for previous iteration
-        delta = 9999 # Initialization of delta (the change between each iteration)
-        E = 0 # Initialization for next iteration
-        eps = 10**-8 # Tolerance
-
-        # Newton-Rhapsod method
-        for counter in range(100):
-            delta = -(E_prev - e*jnp.sin(E_prev) - M)/(1 - e*jnp.cos(E_prev))
-            E = E_prev + delta
-            E_prev = E
-
-        return E
+        self.dt = dt
 
 
 
@@ -65,12 +40,8 @@ class Spacecraft:
 
     def set_state_eci(self, t):
 
-        self.M = (self.n*t + self.M_start) % (2*jnp.pi) # Current mean anomaly
-        r, v = self.oe_to_eci(jnp.array([self.a, self.e, self.i, self.Om, self.w, self.M]))
-
-        # Add process noise
-        # r = r + jnp.random.multivariate_normal(jnp.zeros(3), self.Qr)
-        # v = v + jnp.random.multivariate_normal(jnp.zeros(3), self.Qv)
+        self.M = (self.n*t + self.M_start) % (2*np.pi) # Current mean anomaly
+        r, v = oe_to_eci([self.a, self.e, self.i, self.Om, self.w, self.M])
 
         self.r = r
         self.v = v
@@ -78,31 +49,8 @@ class Spacecraft:
 
 
 
-    def oe_to_eci(self, oe):
+    def apply_control(self, dv, t):
 
-        a = oe[0]
-        e = oe[1]
-        i = oe[2]
-        Om = oe[3]
-        w = oe[4]
-        M = oe[5]
-
-        E = self.get_E(M, e) # Change the function to do this
-
-        T = 2*jnp.pi*jnp.sqrt(a**3/398600)
-        n = 2*jnp.pi/T
-
-        # Obtain rotation matrices to rotate by RAAN, inclination, and argument of periapsis
-        R1 = jnp.array([[jnp.cos(-Om), jnp.sin(-Om), 0], [-jnp.sin(-Om), jnp.cos(-Om), 0], [0, 0, 1]])
-        R2 = jnp.array([[1, 0, 0], [0, jnp.cos(-i), jnp.sin(-i)], [0, -jnp.sin(-i), jnp.cos(-i)]])
-        R3 = jnp.array([[jnp.cos(-w), jnp.sin(-w), 0], [-jnp.sin(-w), jnp.cos(-w), 0], [0, 0, 1]])
-
-        # Obtain positions and velocities in perifocal frame
-        r_pqw = jnp.array([a*(jnp.cos(E)-e), a*jnp.sqrt(1-e**2)*jnp.sin(E), 0])
-        v_pqw = a*n/(1-e*jnp.cos(E)) * jnp.array([-jnp.sin(E), jnp.sqrt(1-e**2)*jnp.cos(E), 0])
-
-        # Apply rotation matrices to obtain r and v in the inertial frame
-        r = R1 @ R2 @ R3 @ r_pqw
-        v = R1 @ R2 @ R3 @ v_pqw
-
-        return (r, v)
+        r, v = self.get_state_eci(t)
+        self.v = v + dv
+        self.a, self.e, self.i, self.Om, self.w, self.M = eci_to_oe(self.r, self.v)

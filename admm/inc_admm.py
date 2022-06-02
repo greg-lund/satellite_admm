@@ -60,6 +60,8 @@ class IncADMM:
         x_props = [self.f(mu[i]) for i in range(N)]
         As = [self.fA(mu[i]) for i in range(N)]
         Cs = [fC[i](x_props[i]) for i in range(N)]
+        # print(g[0](x_props[0]))
+        # print(Cs[0]@x_props[0])
         ys = [y[i] - g[i](x_props[i]) + Cs[i]@x_props[i] for i in range(N)]
         cov_invs = [np.linalg.inv(As[i]@cov[i]@As[i].T + self.Q) for i in range(N)]
 
